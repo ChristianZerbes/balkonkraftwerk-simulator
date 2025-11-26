@@ -18,6 +18,7 @@ function isValidNumber(value) {
   return Number.isFinite(num);
 }
 
+
 function calculateDifferences(entries) {
   // Liste bereinigen
   const cleaned = entries.filter(e => isValidNumber(e.state));
