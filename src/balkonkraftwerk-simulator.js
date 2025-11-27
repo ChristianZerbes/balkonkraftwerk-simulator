@@ -13,11 +13,6 @@ function readCsv(filePath) {
   });
 }
 
-function isValidNumber(value) {
-  const num = Number(value);
-  return Number.isFinite(num);
-}
-
 function calculateDifferences(entries) {
   // Liste bereinigen
   const cleaned = entries.filter(e => isValidNumber(e.state));
@@ -50,17 +45,17 @@ function calculateDifferences(entries) {
 }
 
 function calculatekWh(entries) {
-    let kWh = 0
-    for (const entry of entries) {
-        kWh += (entry.kW * entry.time_difference_hours)
-    }
-    return kWh
+  let kWh = 0
+  for (const entry of entries) {
+    kWh += (entry.kW * entry.time_difference_hours)
+  }
+  return kWh
 }
 
 // Beispiel:
 readCsv('./data/history-2.csv').then(json => {
-    const differences = calculateDifferences(json)
-    console.log(differences)
-    const kWh = calculatekWh(differences)
-    console.log(kWh)
+  const differences = calculateDifferences(json)
+  console.log(differences)
+  const kWh = calculatekWh(differences)
+  console.log(kWh)
 });
