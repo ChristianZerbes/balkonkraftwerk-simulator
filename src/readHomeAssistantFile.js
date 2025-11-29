@@ -16,25 +16,28 @@ function readCSV(filePath) {
         "sensor.solarbank_3_e2700_pro_akkuenergie": "akkuLadestand"
     };
 
-    return rows.map(line => {
-        const parts = line.split(',');
+    return rows
+        .map(line => line.split(',').map(p => p.trim()))
+        .filter(parts => Number.isFinite(Number(parts[1])))
+        .map(parts => {
+            let entity_id = parts[0];
 
-        let entity_id = parts[0];
+            if (entityMap[entity_id]) {
+                entity_id = entityMap[entity_id];
+            }
 
-        if (entityMap[entity_id]) {
-            entity_id = entityMap[entity_id];
-        }
-
-        return {
-            entity_id,
-            state: parts[1],
-            last_changed: parts[2]
-        };
-    });
+            return {
+                entity_id,
+                state: parts[1],
+                last_changed: parts[2]
+            };
+        });
 }
 
 // ---- Timestamp → DE (ISO ähnlich) ----
 function formatGermanTimestamp(ts) {
+    const dateObj = new Date(ts);
+
     const dtf = new Intl.DateTimeFormat("de-DE", {
         timeZone: "Europe/Berlin",
         year: "numeric",
@@ -42,22 +45,28 @@ function formatGermanTimestamp(ts) {
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
+        second: "2-digit"
     });
 
-    const parts = dtf.formatToParts(new Date(ts));
+    const parts = dtf.formatToParts(dateObj);
     const get = (t) => parts.find(p => p.type === t).value;
 
     const date = `${get("year")}-${get("month")}-${get("day")}`;
     const time = `${get("hour")}:${get("minute")}:${get("second")}`;
 
-    const offsetMinutes = -new Date(ts).getTimezoneOffset();
+    // Millisekunden manuell hinzufügen
+    const ms = String(dateObj.getMilliseconds()).padStart(3, "0");
+
+    // Zeitzonenoffset holen
+    const offsetMinutes = -dateObj.getTimezoneOffset();
     const sign = offsetMinutes >= 0 ? "+" : "-";
     const hours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, "0");
     const minutes = String(Math.abs(offsetMinutes) % 60).padStart(2, "0");
 
-    return `${date}T${time}${sign}${hours}:${minutes}`;
+    // ISO-ähnlicher Timestamp MIT Millisekunden
+    return `${date}T${time}.${ms}${sign}${hours}:${minutes}`;
 }
+
 
 // ---- TimeSeries Bauen ----
 function buildTimeSeries(entries) {
