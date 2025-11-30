@@ -19,7 +19,8 @@ function simulate(result) {
 
     let previousTimestamp = 0
 
-    let initialAkkuLadestand = result[0].akkuLadestand
+    let normierterAkkuLadestand = result[0].akkuLadestand
+    let simulierterAkkuLadestand = result[0].akkuLadestand
 
     return result.map((entry, index) => {
         const solarleistung = Number(entry.solarleistung) || 0;
@@ -27,12 +28,43 @@ function simulate(result) {
 
         const simulierteSolarleistung = solarleistung * SOLAR_FAKTOR;
 
-        const simulierteHausabgabe = Math.min(Math.min(simulierteSolarleistung, gesamtVerbrauch), MAX_HAUSABGABE);
+        const tmpSimulierteHausabgabe = Math.min(Math.min(simulierteSolarleistung, gesamtVerbrauch), MAX_HAUSABGABE);
 
 
-        const simulierteAkkuLadung = simulierteSolarleistung - simulierteHausabgabe
+        let simulierteAkkuLadung = Math.min(simulierteSolarleistung - tmpSimulierteHausabgabe, MAX_AKKULADUNG)
+        let simulierteAkkuEntladung = Math.min(gesamtVerbrauch, MAX_HAUSABGABE) - tmpSimulierteHausabgabe
 
-        const simulierterNetzbezug = gesamtVerbrauch - simulierteHausabgabe;
+        if (index > 0) {
+            const t1 = new Date(previousTimestamp);
+            const t2 = new Date(entry.timestamp);
+
+            const seconds = (t2 - t1) / 1000;
+            const hours = seconds / 3600;
+
+            const ladeEnergie = ((simulierteAkkuLadung * hours) * EFFIZIENZ_AKKU_LADEN);
+
+            if (simulierterAkkuLadestand + ladeEnergie <= MAX_AKKULADESTAND) {
+                simulierterAkkuLadestand += ((simulierteAkkuLadung * hours) * EFFIZIENZ_AKKU_LADEN);
+            } else {
+                simulierterAkkuLadestand = MAX_AKKULADESTAND
+                simulierteAkkuLadung = 0
+            }
+
+            const entladeEnergie = ((simulierteAkkuEntladung * hours) / getEntladeEffizienz(simulierteAkkuEntladung))
+
+            if (simulierterAkkuLadestand - entladeEnergie > MIN_AKKULADESTAND) {
+                simulierterAkkuLadestand -= ((simulierteAkkuEntladung * hours) / getEntladeEffizienz(simulierteAkkuEntladung))
+            } else {
+                simulierterAkkuLadestand = MIN_AKKULADESTAND
+                simulierteAkkuEntladung = 0
+            }
+
+        }
+
+        const tmpSimulierterNetzbezug = gesamtVerbrauch - tmpSimulierteHausabgabe;
+
+        const simulierteHausabgabe = tmpSimulierteHausabgabe + simulierteAkkuEntladung
+        const simulierterNetzbezug = tmpSimulierterNetzbezug - simulierteAkkuEntladung
 
         if (index > 0) {
             const t1 = new Date(previousTimestamp);
@@ -42,21 +74,30 @@ function simulate(result) {
             const hours = seconds / 3600;
 
             // W * Stunden = Wh
-            initialAkkuLadestand += ((entry.akkuLadung * hours) * EFFIZIENZ_AKKU_LADEN);
-            initialAkkuLadestand -= ((entry.akkuEntladung * hours) / getEntladeEffizienz(entry.akkuEntladung));
-            initialAkkuLadestand = Math.min(initialAkkuLadestand, MAX_AKKULADESTAND)
-            initialAkkuLadestand = Math.max(initialAkkuLadestand, MIN_AKKULADESTAND)
+            normierterAkkuLadestand += ((entry.akkuLadung * hours) * EFFIZIENZ_AKKU_LADEN);
+            normierterAkkuLadestand -= ((entry.akkuEntladung * hours) / getEntladeEffizienz(entry.akkuEntladung));
+            normierterAkkuLadestand = Math.min(normierterAkkuLadestand, MAX_AKKULADESTAND)
+            normierterAkkuLadestand = Math.max(normierterAkkuLadestand, MIN_AKKULADESTAND)
+
+            if (normierterAkkuLadestand - ((entry.akkuEntladung * hours) / getEntladeEffizienz(entry.akkuEntladung)) > MIN_AKKULADESTAND) {
+
+            }
         }
 
         previousTimestamp = entry.timestamp;
+        previousAkkuLadestand = entry.simulierterAkkuLadestand
 
         return {
             ...entry,
             simulierteSolarleistung,
-            simulierteHausabgabe,
+            tmpSimulierteHausabgabe,
             simulierteAkkuLadung,
+            simulierteAkkuEntladung,
+            tmpSimulierterNetzbezug,
+            simulierteHausabgabe,
             simulierterNetzbezug,
-            initialAkkuLadestand
+            simulierterAkkuLadestand,
+            normierterAkkuLadestand
         };
     });
 }
