@@ -34,6 +34,7 @@ function simulate(result) {
         let simulierteAkkuLadung = Math.min(simulierteSolarleistung - tmpSimulierteHausabgabe, MAX_AKKULADUNG)
         let simulierteAkkuEntladung = Math.min(gesamtVerbrauch, MAX_HAUSABGABE) - tmpSimulierteHausabgabe
 
+
         if (index > 0) {
             const t1 = new Date(previousTimestamp);
             const t2 = new Date(entry.timestamp);
@@ -66,6 +67,11 @@ function simulate(result) {
         const simulierteHausabgabe = tmpSimulierteHausabgabe + simulierteAkkuEntladung
         const simulierterNetzbezug = tmpSimulierterNetzbezug - simulierteAkkuEntladung
 
+        let simulierteVerpuffteSolarleistung = 0
+        if (simulierteAkkuLadung === 0) {
+            simulierteVerpuffteSolarleistung = simulierteSolarleistung - simulierteHausabgabe
+        }
+
         if (index > 0) {
             const t1 = new Date(previousTimestamp);
             const t2 = new Date(entry.timestamp);
@@ -92,6 +98,7 @@ function simulate(result) {
             simulierteSolarleistung,
             tmpSimulierteHausabgabe,
             simulierteAkkuLadung,
+            simulierteVerpuffteSolarleistung,
             simulierteAkkuEntladung,
             tmpSimulierterNetzbezug,
             simulierteHausabgabe,

@@ -29,12 +29,14 @@ async function run() {
     const simulierteAkkuLadung = calculateKwhFromResult(simulated, "simulierteAkkuLadung");
     const simulierteAkkuEntladung = calculateKwhFromResult(simulated, "simulierteAkkuEntladung");
     const simulierteHausabgabe = calculateKwhFromResult(simulated, "simulierteHausabgabe");
+    const simulierteVerpuffteSolarleistung = calculateKwhFromResult(simulated, "simulierteVerpuffteSolarleistung");
 
     console.log("Simulierter Netzbezug kWh:", simulatedKWhNetz);
     console.log("Simulierte Solarleistung kWh:", simulatedSolarleistung);
     console.log("Simulierte Akku Ladung", simulierteAkkuLadung);
     console.log("Simulierte Akku Entladung", simulierteAkkuEntladung);
     console.log("Simulierte Hausabgabe", simulierteHausabgabe);
+    console.log("Simulierte Verpuffte Solarleistung", simulierteVerpuffteSolarleistung);
 
 
     exportToCsv(simulated, path.join(__dirname, '..', 'output', 'output.csv'));
