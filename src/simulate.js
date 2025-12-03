@@ -3,9 +3,11 @@ const { getEntladeEffizienz } = require('./getEntladeEffizienz');
 // ---- Konfiguration ----
 const SOLAR_FAKTOR = 2;
 const MAX_HAUSABGABE = 800;
-const MAX_AKKULADUNG = 1800;
+const MAX_AKKULADUNG = 3600;
+// const MAX_AKKULADUNG = 1800;
 const MIN_AKKULADESTAND = 268
-const MAX_AKKULADESTAND = 2607
+// const MAX_AKKULADESTAND = 2607
+const MAX_AKKULADESTAND = 4100
 const EFFIZIENZ_AKKU_LADEN = 0.88
 
 
@@ -69,7 +71,7 @@ function simulate(result) {
 
         let simulierteVerpuffteSolarleistung = 0
         if (simulierteAkkuLadung === 0) {
-            simulierteVerpuffteSolarleistung = simulierteSolarleistung - simulierteHausabgabe
+            simulierteVerpuffteSolarleistung = Math.max(simulierteSolarleistung - simulierteHausabgabe, 0)
         }
 
         if (index > 0) {

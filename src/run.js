@@ -4,8 +4,82 @@ const { exportToCsv } = require('./export');
 const { simulate } = require('./simulate');
 const path = require('path');
 
+function printSimulationTable({
+    kWhNetz,
+    kWhSolar,
+    kwHVerbrauch,
+    hausabgabe,
+    akkuLadung,
+    akkuEntladung,
+
+    simulatedKWhNetz,
+    simulatedSolarleistung,
+    simulierteAkkuLadung,
+    simulierteAkkuEntladung,
+    simulierteHausabgabe,
+    simulierteVerpuffteSolarleistung
+}) {
+
+    const r = (v) => (typeof v === "number" ? v.toFixed(2) : v);
+    const d = (real, sim) =>
+        (typeof real === "number" && typeof sim === "number")
+            ? (sim - real).toFixed(2)
+            : "";
+
+    const table = [
+        {
+            Messwert: "Netzbezug (kWh)",
+            Real: r(kWhNetz),
+            Simuliert: r(simulatedKWhNetz),
+            Differenz: d(kWhNetz, simulatedKWhNetz)
+        },
+        {
+            Messwert: "Solarleistung (kWh)",
+            Real: r(kWhSolar),
+            Simuliert: r(simulatedSolarleistung),
+            Differenz: d(kWhSolar, simulatedSolarleistung)
+        },
+        {
+            Messwert: "Gesamtverbrauch (kWh)",
+            Real: r(kwHVerbrauch),
+            Simuliert: "",
+            Differenz: ""
+        },
+        {
+            Messwert: "Hausabgabe (kWh)",
+            Real: r(hausabgabe),
+            Simuliert: r(simulierteHausabgabe),
+            Differenz: d(hausabgabe, simulierteHausabgabe)
+        },
+        {
+            Messwert: "Akku Ladung (kWh)",
+            Real: r(akkuLadung),
+            Simuliert: r(simulierteAkkuLadung),
+            Differenz: d(akkuLadung, simulierteAkkuLadung)
+        },
+        {
+            Messwert: "Akku Entladung (kWh)",
+            Real: r(akkuEntladung),
+            Simuliert: r(simulierteAkkuEntladung),
+            Differenz: d(akkuEntladung, simulierteAkkuEntladung)
+        },
+        {
+            Messwert: "Verpuffte Solarleistung",
+            Real: "",
+            Simuliert: r(simulierteVerpuffteSolarleistung),
+            Differenz: ""
+        }
+    ];
+
+    console.log("\n==== Simulationsergebnisse ====\n");
+    console.table(table);
+}
+
+
+
 async function run() {
-    const filePath = path.join(__dirname, '..', 'data', '2025-11-23.csv');
+    const date = "2025-12-02"
+    const filePath = path.join(__dirname, '..', 'data', 'history ' + date + '.csv');
     const result = readHomeAssistantFile(filePath);
 
     const kWhNetz = calculateKwhFromResult(result, "netzbezug");
@@ -14,13 +88,6 @@ async function run() {
     const akkuLadung = calculateKwhFromResult(result, "akkuLadung");
     const akkuEntladung = calculateKwhFromResult(result, "akkuEntladung");
     const hausabgabe = calculateKwhFromResult(result, "hausabgabe")
-
-    console.log("Netzbezug kWh:", kWhNetz);
-    console.log("Solarleistung kWh:", kWhSolar);
-    console.log("Gesamtverbrauch", kwHVerbrauch);
-    console.log("Hausabgabe", hausabgabe)
-    console.log("Akku Ladung", akkuLadung);
-    console.log("Akku Entladung", akkuEntladung);
 
     const simulated = simulate(result)
 
@@ -31,15 +98,23 @@ async function run() {
     const simulierteHausabgabe = calculateKwhFromResult(simulated, "simulierteHausabgabe");
     const simulierteVerpuffteSolarleistung = calculateKwhFromResult(simulated, "simulierteVerpuffteSolarleistung");
 
-    console.log("Simulierter Netzbezug kWh:", simulatedKWhNetz);
-    console.log("Simulierte Solarleistung kWh:", simulatedSolarleistung);
-    console.log("Simulierte Akku Ladung", simulierteAkkuLadung);
-    console.log("Simulierte Akku Entladung", simulierteAkkuEntladung);
-    console.log("Simulierte Hausabgabe", simulierteHausabgabe);
-    console.log("Simulierte Verpuffte Solarleistung", simulierteVerpuffteSolarleistung);
+    printSimulationTable({
+        kWhNetz,
+        kWhSolar,
+        kwHVerbrauch,
+        hausabgabe,
+        akkuLadung,
+        akkuEntladung,
 
+        simulatedKWhNetz,
+        simulatedSolarleistung,
+        simulierteAkkuLadung,
+        simulierteAkkuEntladung,
+        simulierteHausabgabe,
+        simulierteVerpuffteSolarleistung
+    });
 
-    exportToCsv(simulated, path.join(__dirname, '..', 'output', 'output.csv'));
+    exportToCsv(simulated, path.join(__dirname, '..', 'output', 'result ' + date + '.csv'));
 
 }
 
