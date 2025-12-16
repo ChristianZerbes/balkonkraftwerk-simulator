@@ -78,8 +78,8 @@ function printSimulationTable({
 
 
 async function run() {
-    const date = "2025-12-02"
-    const filePath = path.join(__dirname, '..', 'data', 'history ' + date + '.csv');
+    const date = "tmp_2025-12-12"
+    const filePath = path.join(__dirname, '../..', 'data', date + '.csv');
     const result = readHomeAssistantFile(filePath);
 
     const kWhNetz = calculateKwhFromResult(result, "netzbezug");
@@ -114,7 +114,7 @@ async function run() {
         simulierteVerpuffteSolarleistung
     });
 
-    exportToCsv(simulated, path.join(__dirname, '..', 'output', 'result ' + date + '.csv'));
+    exportToCsv(simulated, path.join(__dirname, '../..', 'output', 'result ' + date + '.csv'));
 
 }
 
