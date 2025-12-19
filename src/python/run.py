@@ -297,19 +297,72 @@ def print_simulation_table(real, simulated):
     for row in table:
         print(f"{row['Messwert']:30s} | {row['Real']:>10} | {row['Simuliert']:>10} | {row['Differenz']:>10}")
 
-def main():
-    # Beispiel: Dateiname und Ordner ggf. anpassen!
-    date = "2025-12-03"
+def run_simulation(result, date, szenario, 
+                   solar_faktor, max_hausabgabe, max_akkuladung, min_akkuladestand, max_akkuladestand):
+    
     dt = datetime.strptime(date, "%Y-%m-%d")
     yesterday = dt - timedelta(days=1)
     yesterday_date = yesterday.strftime("%Y-%m-%d")
 
+    # Hole den Akkustand des Vortages (bzw. 0 falls Datei fehlt)
+    yesterday_path = os.path.join("../../output", f"{yesterday_date}_{szenario}.csv")
+    last_akku_stand = get_last_simulierter_akku_stand(yesterday_path)
+    # Starte die Simulation
+    sim_data = simulate(result, solar_faktor, max_hausabgabe, max_akkuladung, min_akkuladestand, max_akkuladestand, last_akku_stand)
+    summary = {
+        'netz': calculate_kwh_from_result(sim_data, "simulierterNetzbezug"),
+        'szenario': szenario
+    }
+    # Exportiere CSV für aktuellen Tag
+    output_path = os.path.join("../../output", f"{date}_{szenario}.csv")
+    export_to_csv(sim_data, output_path)
+    return summary
+
+def add_to_csv(string_array):
+
+    file_path = os.path.join("../../result", "result.csv")
+
+    date_key = str(string_array[0])
+    def value_to_str(val):
+        if isinstance(val, float):
+            return f"{val:.2f}"
+        return str(val)
+    new_line = ';'.join([value_to_str(v) for v in string_array])
+
+    # Datei einlesen (falls sie existiert)
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = [line.rstrip('\n\r') for line in f]
+    else:
+        lines = []
+
+    # Prüfe auf existierende Zeile mit selbem Datum
+    found = False
+    new_lines = []
+    for line in lines:
+        columns = line.split(';')
+        if columns and columns[0] == date_key:
+            new_lines.append(new_line)
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(new_line)
+
+    # Schreibe alles zurück
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write('\n'.join(new_lines) + '\n')
+
+def main():
+    # Beispiel: Dateiname und Ordner ggf. anpassen!
+    date = "2025-12-18"
+    
     file_path = os.path.join("../../data", date + ".csv")
     
     os.makedirs("output", exist_ok=True)
     result = read_home_assistant_file(file_path)
 
-    aktl = {
+    real = {
         'netz': calculate_kwh_from_result(result, "netzbezug")
         # 'solar': calculate_kwh_from_result(result, "solarleistung"),
         # 'verbrauch': calculate_kwh_from_result(result, "gesamtVerbrauch"),
@@ -329,60 +382,68 @@ def main():
         # 'verpuffte': calculate_kwh_from_result(normierte_data, "simulierteVerpuffteSolarleistung")
     }
 
-
-    output_path = os.path.join("../../output", f"{yesterday_date}_sz01.csv")
-    last_akku_stand = get_last_simulierter_akku_stand(output_path)
-    sz01_data = simulate(result, 2, 800, 1800, 268, 2607, last_akku_stand)
-    sz01 = {
-        'netz': calculate_kwh_from_result(sz01_data, "simulierterNetzbezug")
-    }
-    output_path = os.path.join("../../output", f"{date}_sz01.csv")
-    export_to_csv(sz01_data, output_path)
-
-    output_path = os.path.join("../../output", f"{yesterday_date}_sz02.csv")
-    last_akku_stand = get_last_simulierter_akku_stand(output_path)
-    print(last_akku_stand)
-    sz02_data = simulate(result, 2, 800, 1800, 536, 5214, last_akku_stand)
-    sz02 = {
-        'netz': calculate_kwh_from_result(sz02_data, "simulierterNetzbezug")
-    }
-    output_path = os.path.join("../../output", f"{date}_sz02.csv")
-    export_to_csv(sz02_data, output_path)
-
-    # sz02_data = simulate(result, 2, 800, 1800, 536, 5214)
-    # sz02 = {
-    #     'netz': calculate_kwh_from_result(sz02_data, "simulierterNetzbezug")
-    # }
-    # output_path = os.path.join("../../output", f"{date}_sz02.csv")
-    # export_to_csv(sz02_data, output_path)
+    sz01 = run_simulation(result, date, "sz01", 2, 800, 1800, 268, 2607)
+    sz02 = run_simulation(result, date, "sz02", 1, 800, 3600, 426, 4152)
+    sz03 = run_simulation(result, date, "sz03", 1, 800, 3600, 536, 5214)
+    sz04 = run_simulation(result, date, "sz04", 2, 800, 3600, 426, 4152)
+    sz05 = run_simulation(result, date, "sz05", 2, 800, 3600, 536, 5214)
+    sz06 = run_simulation(result, date, "sz06", 1, 1200, 1800, 268, 2607)
+    sz07 = run_simulation(result, date, "sz07", 2, 1200, 1800, 268, 2607)
+    sz08 = run_simulation(result, date, "sz08", 1, 1200, 3600, 426, 4152)
+    sz09 = run_simulation(result, date, "sz09", 1, 1200, 3600, 536, 5214)
+    sz10 = run_simulation(result, date, "sz10", 2, 1200, 3600, 426, 4152)
+    sz11 = run_simulation(result, date, "sz11", 2, 1200, 3600, 536, 5214)
 
 
+    # csv_header = "datum;real;normiert;delta;sz01;sz01_delta;sz02;sz02_delta"
+    result_array = [
+        date, 
+        real['netz'], 
+        normiert['netz'], 
+        real['netz'] - normiert['netz'], 
+        sz01['netz'], 
+        real['netz'] - sz01['netz'], 
+        sz02['netz'], 
+        real['netz'] - sz02['netz'],
+        sz03['netz'],
+        real['netz'] - sz03['netz'],
+        sz04['netz'],
+        real['netz'] - sz04['netz'],
+        sz05['netz'],
+        real['netz'] - sz05['netz'],
+        sz06['netz'],
+        real['netz'] - sz06['netz'],
+        sz07['netz'],
+        real['netz'] - sz07['netz'],
+        sz08['netz'],
+        real['netz'] - sz08['netz'],
+        sz09['netz'],
+        real['netz'] - sz09['netz'],
+        sz10['netz'],
+        real['netz'] - sz10['netz'],
+        sz11['netz'],
+        real['netz'] - sz11['netz'],
+    ]
     
-    print(f"Real: {aktl['netz']}")
-    print(f"Normiert: {normiert['netz']}")
-    print(f"8 Panele, 800w, 1 E2700: {sz01['netz']}")
-    # print(f"8 Panele, 800w, 2 E2700: {sz02['netz']}")
+    add_to_csv(result_array)
 
-
-
-    print_simulation_table(aktl, normiert)
-    
-    print(f"\nSimulierte Daten als CSV nach '{output_path}' geschrieben.")
 
 if __name__ == "__main__":
     main()
 
 # Simulationsszenarien
-# Szenario  FaktorSolarleistung   Speicherkapazität   Einspeisung
-# AKTL      1                     268-2607                800
-# SZ01      2                     268-2607                800
-# SZ02      1                     426-4152                800
-# SZ03      2                     426-4152                800
-# SZ04      1                     536-5214                800
-# SZ05      2                     536-5214                800
-# SZ06      1                     268-2607                1200
-# SZ07      2                     268-2607                1200
-# SZ08      1                     426-4152                1200
-# SZ09      2                     426-4152                1200
-# SZ10      1                     536-5214                1200
-# SZ11      2                     536-5214                1200
+# Szenario  FaktorSolarleistung   Ladeleistung  Speicherkapazität   Einspeisung
+# AKTL      1                     1800          268-2607                800
+# SZ01      2                     1800          268-2607                800
+# SZ02      1                     3600          426-4152                800
+# SZ03      2                     3600          426-4152                800
+# SZ04      1                     3600          536-5214                800
+
+# SZ05      2                     3600          536-5214                800
+
+# SZ06      1                     1800          268-2607                1200
+# SZ07      2                     1800          268-2607                1200
+# SZ08      1                     3600          426-4152                1200
+# SZ09      2                     3600          426-4152                1200
+# SZ10      1                     3600          536-5214                1200
+# SZ11      2                     3600          536-5214                1200
