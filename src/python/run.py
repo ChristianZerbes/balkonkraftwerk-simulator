@@ -45,11 +45,13 @@ def read_csv(file_path):
         data.append({
             'entity_id': ent,
             'state': val,
-            'last_changed': row[2].strip()
+            'value': val,
+            'last_changed': row[3].strip(),
+            'iso_time': row[3].strip()
         })
     return data
 
-def format_german_timestamp(ts):
+def format_german_timestamp_old(ts):
     # expects string or datetime
     if not isinstance(ts, datetime):
         ts = datetime.fromisoformat(str(ts))
@@ -62,6 +64,15 @@ def format_german_timestamp(ts):
     hours = f"{abs(int(tz)//100):02d}" if tz else "01"
     minutes = f"{abs(int(tz)%100):02d}" if tz else "00"
     return local_time.strftime(f"%Y-%m-%dT%H:%M:%S.{ms}{sign}{hours}:{minutes}")
+
+def format_german_timestamp(ts):
+    # expects string or datetime, no timezone conversion
+    if not isinstance(ts, datetime):
+        ts = datetime.fromisoformat(str(ts))
+
+    ms = f"{ts.microsecond // 1000:03d}"
+
+    return ts.strftime(f"%Y-%m-%dT%H:%M:%S.{ms}")
 
 def build_time_series(entries):
     sorted_entries = sorted(
@@ -355,7 +366,7 @@ def add_to_csv(string_array):
 
 def main():
     # Beispiel: Dateiname und Ordner ggf. anpassen!
-    date = "2025-12-18"
+    date = "2025-12-22"
     
     file_path = os.path.join("../../data", date + ".csv")
     
