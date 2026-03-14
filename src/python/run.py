@@ -25,7 +25,12 @@ ENTITY_MAP = {
     "sensor.solarbank_3_e2700_pro_solarleistung": "solarleistung",
     "sensor.anker_solix_akku_ladung": "akkuLadung",
     "sensor.anker_solix_akku_entladung": "akkuEntladung",
-    "sensor.solarbank_3_e2700_pro_akkuenergie": "akkuLadestand"
+    "sensor.solarbank_3_e2700_pro_akkuenergie": "akkuLadestand",
+    "sensor.solarbank_3_e2700_pro_solar_pv1": "solarleistung_pv1",
+    "sensor.solarbank_3_e2700_pro_solar_pv2": "solarleistung_pv2",
+    "sensor.solarbank_3_e2700_pro_solar_pv3": "solarleistung_pv3",
+    "sensor.solarbank_3_e2700_pro_solar_pv4": "solarleistung_pv4", 
+    "sensor.shelly_pro_3_em_netzeinspeisung": "netzeinspeisung"
 }
 
 def read_csv(file_path):
@@ -103,8 +108,8 @@ def build_time_series(entries):
     # Zusatz: gesamtVerbrauch
     for r in result:
         try:
-            if r.get('netzbezug') is not None and r.get('hausabgabe') is not None:
-                r['gesamtVerbrauch'] = r['netzbezug'] + r['hausabgabe']
+            if r.get('netzbezug') is not None and r.get('hausabgabe') is not None and r.get('netzeinspeisung') is not None: 
+                r['gesamtVerbrauch'] = r['netzbezug'] + r['hausabgabe'] - r['netzeinspeisung']
             else:
                 r['gesamtVerbrauch'] = None
         except:
@@ -117,6 +122,61 @@ def build_time_series(entries):
 
 def read_home_assistant_file(file_path):
     return build_time_series(read_csv(file_path))
+
+def adjust_pv_values_if_solarleistung_near_800(entry):
+    """
+    Check if solarleistung is around 800 (±5). If so, replace the two lowest
+    PV values with the average of the two highest.
+    
+    Args:
+        entry: Dictionary containing solarleistung and solarleistung_pv1-4
+    
+    Returns:
+        Modified entry (in-place modification, also returns for chaining)
+    """
+    solarleistung = entry.get('solarleistung')
+    if solarleistung is None:
+        return solarleistung
+    
+    # Check if solarleistung is between 795 and 805 (800 ± 5)
+    if not (795 <= solarleistung <= 805):
+        return solarleistung
+    
+    # Get the four PV values
+    pv_keys = ['solarleistung_pv1', 'solarleistung_pv2', 'solarleistung_pv3', 'solarleistung_pv4']
+    pv_values = []
+    
+    for key in pv_keys:
+        val = entry.get(key)
+        if val is not None:
+            try:
+                pv_values.append((key, float(val)))
+            except (ValueError, TypeError):
+                return entry
+    
+    # Need at least 4 values
+    if len(pv_values) < 4:
+        return entry
+    
+    # Sort by value: (key, value)
+    sorted_pv = sorted(pv_values, key=lambda x: x[1])
+    
+    # Get the two lowest and two highest
+    two_lowest_keys = [sorted_pv[0][0], sorted_pv[1][0]]
+    two_highest_values = [sorted_pv[2][1], sorted_pv[3][1]]
+    
+    # Calculate average of two highest
+    average = sum(two_highest_values) / 2
+    
+    # Replace the two lowest with the average
+    for key in two_lowest_keys:
+        entry[key] = average
+    
+    # Update solarleistung to the sum of adjusted PV values
+    pv_keys = ['solarleistung_pv1', 'solarleistung_pv2', 'solarleistung_pv3', 'solarleistung_pv4']
+    new_solarleistung = sum(entry.get(key, 0) for key in pv_keys)
+    
+    return new_solarleistung
 
 # == calculateEnergy.js ==
 def calculate_kwh_from_result(result, entity):
@@ -155,9 +215,9 @@ def simulate(result, solar_faktor, max_hausabgabe, max_akkuladung, min_akkulades
     simulated_rows = []
 
     for i, entry in enumerate(result):
-        solarleistung = float(entry.get("solarleistung") or 0)
+        # solarleistung = float(entry.get("solarleistung") or 0)
         gesamt_verb = float(entry.get("gesamtVerbrauch") or 0)
-        simulierte_solarleistung = solarleistung * solar_faktor
+        simulierte_solarleistung = (adjust_pv_values_if_solarleistung_near_800(entry) or 0) * solar_faktor
         tmp_simulierte_hausabgabe = min(min(simulierte_solarleistung, gesamt_verb), max_hausabgabe)
         simulierte_akku_ladung = max(min(simulierte_solarleistung - tmp_simulierte_hausabgabe, max_akkuladung), 0)
         simulierte_akku_entladung = max(min(min(gesamt_verb, max_hausabgabe) - tmp_simulierte_hausabgabe, max_akkuladung), 0)
@@ -214,7 +274,8 @@ def simulate(result, solar_faktor, max_hausabgabe, max_akkuladung, min_akkulades
             'simulierteHausabgabe': simulierte_hausabgabe,
             'simulierterNetzbezug': simulierter_netzbezug,
             'simulierterAkkuLadestand': simulierter_akku_ladestand,
-            'normierterAkkuLadestand': normierter_akku_ladestand
+            'normierterAkkuLadestand': normierter_akku_ladestand,
+            'netzeinspeisung': entry.get('netzeinspeisung', 0)
         })
         simulated_rows.append(simulated_entry)
     return simulated_rows
@@ -413,8 +474,8 @@ def process_date(date_str):
     add_to_csv(result_array)
 
 def main():
-    startDate = "2026-02-01"
-    endDate = "2026-02-28"
+    startDate = "2026-03-01"
+    endDate = "2026-03-13"
 
     start = datetime.strptime(startDate, "%Y-%m-%d")
     end = datetime.strptime(endDate, "%Y-%m-%d")
@@ -429,16 +490,16 @@ if __name__ == "__main__":
     main()
 
 # Simulationsszenarien
-# Szenario  FaktorSolarleistung   Ladeleistung  Speicherkapazität   Einspeisung
-# AKTL      1                     1800          268-2607                800
-# SZ01      2                     1800          268-2607                800
-# SZ02      1                     3600          426-4152                800
-# SZ03      1                     3600          536-5214                800
-# SZ04      2                     3600          426-4152                800
-# SZ05      2                     3600          536-5214                800
-# SZ06      1                     1800          268-2607                1200
-# SZ07      2                     1800          268-2607                1200
-# SZ08      1                     3600          426-4152                1200
-# SZ09      1                     3600          536-5214                1200
-# SZ10      2                     3600          426-4152                1200
-# SZ11      2                     3600          536-5214                1200
+# Szenario  FaktorSolarleistung   Ladeleistung  Speicherkapazität   Einspeisung     Verbose                                             Emoji  
+# AKTL      1                     1800          268-2607                800         Aktuelle Installation                               AK🟦🔋
+# SZ01      2                     1800          268-2607                800         8 Panele                                            01🟪🔋
+# SZ02      1                     3600          426-4152                800         Kleiner Zusatzakku                                  02🟦🔋🪫
+# SZ03      1                     3600          536-5214                800         Großer Zusatzakku                                   03🟦🔋🔋
+# SZ04      2                     3600          426-4152                800         8 Panele + kleiner Zusatzakku                       04🟪🔋🪫
+# SZ05      2                     3600          536-5214                800         8 Panele + großer Zusatzakku                        05🟪🔋🔋
+# SZ06      1                     1800          268-2607                1200        Aktuelle Installation + 1200 W Einspeisung          06🟦🔋   ⚡
+# SZ07      2                     1800          268-2607                1200        8 Panele + 1200 W Einspeisung                       07🟪🔋   ⚡      
+# SZ08      1                     3600          426-4152                1200        Kleiner Zusatzakku + 1200 W Einspeisung             08🟦🔋🪫⚡
+# SZ09      1                     3600          536-5214                1200        Großer Zusatzakku + 1200 W Einspeisung              09🟦🔋🔋⚡
+# SZ10      2                     3600          426-4152                1200        8 Panele + kleiner Zusatzakku + 1200 W Einspeisung  10🟪🔋🪫⚡
+# SZ11      2                     3600          536-5214                1200        8 Panele + großer Zusatzakku + 1200 W Einspeisung   11🟪🔋🔋⚡
