@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="de" class="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Balkonkraftwerk Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    .chart-wrap { position: relative; }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    /* Smooth transitions */
+    body { transition: background-color 0.2s, color 0.2s; }
+    .card { transition: background-color 0.2s, border-color 0.2s; }
+    /* Sticky table header */
+    .sticky-header th { position: sticky; top: 0; z-index: 10; }
+    /* filter chip */
+    .chip { cursor: pointer; transition: all 0.15s; user-select: none; }
+    .chip:hover { opacity: 0.85; transform: translateY(-1px); }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header class="bg-white dark:bg-gray-900 border-b border-slate-200 dark:border-gray-800 shadow-sm sticky top-0 z-50">
+  <div class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg shadow-sm">☀</div>
+      <div>
+        <h1 class="text-base font-semibold leading-tight text-gray-900 dark:text-white">Balkonkraftwerk Dashboard</h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Szenario-Vergleich &amp; Einsparpotenzial</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-gray-800 rounded-xl px-3 py-1.5">
+        <label for="kwHPrice" class="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Strompreis</label>
+        <input id="kwHPrice" type="number" min="0" step="0.01" value="0.25"
+          oninput="buildDetailTable()"
+          class="w-16 text-sm font-semibold text-right bg-transparent text-gray-900 dark:text-white focus:outline-none tabular-nums">
+        <span class="text-xs text-slate-500 dark:text-slate-400">€/kWh</span>
+      </div>
+      <button id="themeBtn" onclick="toggleTheme()"
+        class="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors text-lg"
+        title="Hell/Dunkel umschalten">
+        <span id="themeIcon">🌙</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<main class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+  <!-- KPI CARDS -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="kpiCards"></div>
+
+  <!-- GLOBAL SCENARIO FILTER -->
+  <div class="card bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-sm p-5">
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Szenarien</span>
+        <span class="text-xs text-slate-400 dark:text-slate-500">— gilt für alle Diagramme</span>
+      </div>
+      <div id="scenarioFilter" class="flex flex-wrap gap-2"></div>
+    </div>
+  </div>
+
+  <!-- GESAMTEINSPARUNGEN (Horizontal Bar) -->
+  <div class="card bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-sm p-6">
+    <div class="mb-5">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white">Gesamteinsparungen je Szenario</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Kumulierte Ersparnis gegenüber der aktuellen Anlage (alle verfügbaren Monate)</p>
+    </div>
+    <div class="chart-wrap" style="height:360px">
+      <canvas id="totalSavingsChart"></canvas>
+    </div>
+  </div>
+
+  <!-- MONATLICHE EINSPARUNGEN (Line) -->
+  <div class="card bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-sm p-6">
+    <div class="mb-5">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white">Monatliche Einsparungen</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Wie viel kWh könnten pro Monat eingespart werden?</p>
+    </div>
+    <div class="chart-wrap" style="height:300px">
+      <canvas id="monthlySavingsChart"></canvas>
+    </div>
+  </div>
+
+  <!-- DETAIL TABELLE -->
+  <div class="card bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-sm p-6">
+    <div class="mb-5">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white">Detailübersicht nach Monat</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+        Monatliche Einsparung (kWh) pro Szenario gegenüber der aktuellen Anlage. Grün = hohe Einsparung.
+      </p>
+    </div>
+    <div class="overflow-x-auto -mx-2">
+      <table class="w-full text-sm border-collapse" id="detailTable"></table>
+    </div>
+  </div>
+
+  <!-- SZENARIO BESCHREIBUNGEN -->
+  <div class="card bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-sm p-6">
+    <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Szenario-Beschreibungen</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" id="scenarioCards"></div>
+  </div>
+
+</main>
+
+<footer class="text-center text-xs text-slate-400 dark:text-slate-600 py-6">
+  Balkonkraftwerk Simulator · Anker Solix Solarbank 3 E2700 Pro · Daten: Dez 2025 – Mär 2026
+</footer>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA — embedded CSV
+// ─────────────────────────────────────────────────────────────────────────────
+const CSV_RAW = `datum;real;normiert;delta;sz01;sz01_delta;sz02;sz02_delta;sz03;sz03_delta;sz04;sz04_delta;sz05;sz05_delta;sz06;sz06_delta;sz07;sz07_delta;sz08;sz08_delta;sz09;sz09_delta;sz10;sz10_delta;sz11;sz11_delta
+2025-12-01;6,53;6,33;0,19;4,81;1,71;6,33;0,19;6,33;0,19;4,81;1,71;4,81;1,71;6,32;0,20;4,81;1,72;6,32;0,20;6,32;0,20;4,81;1,72;4,81;1,72
+2025-12-02;6,86;6,86;0,01;6,26;0,60;6,86;0,01;6,86;0,01;5,02;1,85;4,32;2,55;6,81;0,05;6,18;0,68;6,81;0,05;6,81;0,05;4,95;1,91;4,15;2,72
+2025-12-03;8,24;8,22;0,02;7,89;0,35;8,22;0,02;8,22;0,02;7,89;0,35;7,76;0,48;8,22;0,02;7,89;0,35;8,22;0,02;8,22;0,02;7,89;0,35;7,89;0,35
+2025-12-04;8,59;8,59;0,00;8,28;0,32;8,59;0,00;8,59;0,00;8,28;0,32;8,28;0,32;8,59;0,00;8,28;0,32;8,59;0,00;8,59;0,00;8,28;0,32;8,28;0,32
+2025-12-05;6,02;5,98;0,04;5,37;0,65;5,98;0,04;5,98;0,04;5,37;0,65;5,37;0,65;5,98;0,04;5,36;0,66;5,98;0,04;5,98;0,04;5,36;0,66;5,36;0,66
+2025-12-06;3,71;3,69;0,02;3,06;0,65;3,69;0,02;3,69;0,02;3,06;0,65;3,06;0,65;3,69;0,02;3,06;0,65;3,69;0,02;3,69;0,02;3,06;0,65;3,06;0,65
+2025-12-07;5,59;5,56;0,02;4,99;0,59;5,56;0,02;5,56;0,02;4,99;0,59;4,99;0,59;5,56;0,02;4,99;0,59;5,56;0,02;5,56;0,02;4,99;0,59;4,99;0,59
+2025-12-08;6,41;6,36;0,05;5,68;0,73;6,36;0,05;6,36;0,05;5,68;0,73;5,68;0,73;6,35;0,05;5,66;0,75;6,35;0,05;6,35;0,05;5,66;0,75;5,66;0,75
+2025-12-09;7,15;7,24;-0,10;5,83;1,32;7,24;-0,10;7,24;-0,10;5,21;1,94;5,21;1,94;7,22;-0,07;5,69;1,46;7,22;-0,07;7,22;-0,07;4,79;2,36;4,79;2,36
+2025-12-10;7,45;7,43;0,01;7,06;0,38;7,43;0,01;7,43;0,01;6,60;0,84;6,60;0,84;7,43;0,01;7,06;0,38;7,43;0,01;7,43;0,01;6,90;0,54;6,90;0,54
+2025-12-11;7,12;6,89;0,23;5,22;1,90;6,89;0,23;6,89;0,23;5,10;2,02;5,10;2,02;6,96;0,16;5,14;1,98;6,96;0,16;6,96;0,16;5,04;2,08;5,04;2,08
+2025-12-12;8,58;8,57;0,01;8,00;0,58;8,57;0,01;8,57;0,01;8,00;0,58;8,00;0,58;8,57;0,01;8,00;0,58;8,57;0,01;8,57;0,01;8,00;0,58;8,00;0,58
+2025-12-13;7,70;7,58;0,12;7,27;0,44;7,58;0,12;7,58;0,12;7,27;0,44;7,27;0,44;7,58;0,12;7,27;0,44;7,58;0,12;7,58;0,12;7,27;0,44;7,27;0,44
+2025-12-14;7,30;7,29;0,01;6,81;0,48;7,29;0,01;7,29;0,01;6,81;0,48;6,81;0,48;7,29;0,01;6,78;0,52;7,29;0,01;7,29;0,01;6,78;0,52;6,78;0,52
+2025-12-15;6,50;6,46;0,04;5,74;0,76;6,46;0,04;6,46;0,04;5,74;0,76;5,74;0,76;6,46;0,04;5,70;0,79;6,46;0,04;6,46;0,04;5,70;0,79;5,70;0,79
+2025-12-16;6,83;6,81;0,02;6,18;0,66;6,81;0,02;6,81;0,02;6,18;0,66;6,18;0,66;6,81;0,02;6,12;0,71;6,81;0,02;6,81;0,02;6,12;0,71;6,12;0,71
+2025-12-17;7,05;6,99;0,06;5,80;1,26;6,99;0,06;6,99;0,06;5,39;1,67;5,39;1,67;6,94;0,12;5,67;1,38;6,94;0,12;6,94;0,12;5,15;1,90;5,15;1,90
+2025-12-18;4,79;4,79;0,00;3,48;1,31;4,79;0,00;4,79;0,00;2,75;2,04;2,75;2,04;4,79;0,01;3,39;1,40;4,79;0,01;4,79;0,01;2,78;2,02;2,78;2,02
+2025-12-19;7,20;7,19;0,01;6,57;0,64;7,19;0,01;7,19;0,01;6,03;1,18;6,03;1,18;7,19;0,01;6,57;0,64;7,19;0,01;7,19;0,01;6,07;1,13;6,07;1,13
+2025-12-20;6,68;6,56;0,12;5,38;1,30;6,56;0,12;6,56;0,12;5,38;1,30;5,38;1,30;6,54;0,14;5,38;1,30;6,54;0,14;6,54;0,14;5,38;1,30;5,38;1,30
+2025-12-21;7,56;7,60;-0,03;6,07;1,49;7,60;-0,03;7,60;-0,03;5,35;2,22;5,35;2,22;7,59;-0,03;5,74;1,82;7,59;-0,03;7,59;-0,03;5,03;2,53;5,03;2,53
+2025-12-22;10,28;10,27;0,01;9,92;0,36;10,27;0,01;10,27;0,01;9,74;0,54;9,74;0,54;10,27;0,01;9,92;0,36;10,27;0,01;10,27;0,01;9,92;0,36;9,92;0,36
+2025-12-23;11,88;11,87;0,01;11,56;0,32;11,87;0,01;11,87;0,01;11,56;0,32;11,56;0,32;11,87;0,01;11,56;0,32;11,87;0,01;11,87;0,01;11,56;0,32;11,56;0,32
+2025-12-24;11,61;11,53;0,08;11,02;0,59;11,53;0,08;11,53;0,08;11,02;0,59;11,02;0,59;11,53;0,08;10,99;0,63;11,53;0,08;11,53;0,08;10,99;0,63;10,99;0,63
+2025-12-25;9,23;8,97;0,27;7,73;1,50;8,97;0,27;8,97;0,27;6,99;2,25;6,99;2,25;9,03;0,20;7,15;2,08;9,03;0,20;9,03;0,20;6,14;3,09;6,14;3,09
+2025-12-26;3,69;3,72;-0,03;3,17;0,52;3,72;-0,03;3,72;-0,03;2,81;0,89;2,54;1,15;3,65;0,04;2,97;0,72;3,65;0,04;3,65;0,04;2,80;0,89;2,80;0,89
+2025-12-27;1,64;1,82;-0,18;1,55;0,09;1,82;-0,18;1,82;-0,18;0,50;1,14;0,00;1,64;1,82;-0,18;1,60;0,04;1,82;-0,18;1,82;-0,18;0,64;1,00;0,00;1,64
+2025-12-28;1,63;1,64;-0,01;1,34;0,30;1,64;-0,01;1,64;-0,01;0,27;1,36;0,00;1,63;1,64;-0,01;1,34;0,30;1,64;-0,01;1,64;-0,01;0,27;1,36;0,00;1,63
+2025-12-29;2,61;2,98;-0,38;1,87;0,73;2,79;-0,19;2,79;-0,19;0,56;2,04;0,28;2,33;2,76;-0,15;1,84;0,77;2,76;-0,15;2,76;-0,15;0,46;2,15;0,18;2,43
+2025-12-30;5,96;5,88;0,07;4,88;1,07;5,88;0,07;5,88;0,07;3,38;2,58;2,67;3,29;5,88;0,08;4,48;1,48;5,88;0,08;5,88;0,08;2,88;3,07;2,20;3,76
+2025-12-31;13,75;13,72;0,03;13,34;0,41;13,72;0,03;13,72;0,03;12,86;0,89;12,23;1,52;13,72;0,03;13,34;0,41;13,72;0,03;13,72;0,03;13,13;0,62;12,60;1,15
+2026-02-01;7,73;7,65;0,08;7,49;0,24;7,65;0,08;7,65;0,08;7,49;0,24;7,49;0,24;7,65;0,08;7,49;0,24;7,65;0,08;7,65;0,08;7,49;0,24;7,49;0,24
+2026-02-02;8,47;8,46;0,01;8,14;0,33;8,46;0,01;8,46;0,01;8,14;0,33;8,14;0,33;8,46;0,01;8,14;0,33;8,46;0,01;8,46;0,01;8,14;0,33;8,14;0,33
+2026-02-03;6,61;6,52;0,09;6,18;0,43;6,52;0,09;6,52;0,09;6,18;0,43;6,18;0,43;6,52;0,09;6,18;0,43;6,52;0,09;6,52;0,09;6,18;0,43;6,18;0,43
+2026-02-04;6,95;6,75;0,20;5,60;1,35;6,75;0,20;6,75;0,20;5,60;1,35;5,60;1,35;6,72;0,23;5,58;1,37;6,72;0,23;6,72;0,23;5,58;1,37;5,58;1,37
+2026-02-05;6,74;6,74;0,00;6,28;0,46;6,74;0,00;6,74;0,00;6,28;0,46;6,28;0,46;6,74;0,00;6,28;0,46;6,74;0,00;6,74;0,00;6,28;0,46;6,28;0,46
+2026-02-06;7,12;7,03;0,09;6,31;0,81;7,03;0,09;7,03;0,09;6,31;0,81;6,31;0,81;7,03;0,09;6,29;0,84;7,03;0,09;7,03;0,09;6,29;0,84;6,29;0,84
+2026-02-07;10,41;10,38;0,03;9,28;1,13;10,38;0,03;10,38;0,03;9,28;1,13;9,28;1,13;10,38;0,03;9,26;1,14;10,38;0,03;10,38;0,03;9,26;1,14;9,26;1,14
+2026-02-08;6,82;6,77;0,05;5,52;1,30;6,77;0,05;6,77;0,05;5,52;1,30;5,52;1,30;6,77;0,05;5,49;1,33;6,77;0,05;6,77;0,05;5,49;1,33;5,49;1,33
+2026-02-09;5,55;5,28;0,27;3,67;1,88;5,28;0,27;5,28;0,27;3,65;1,90;3,65;1,90;5,27;0,28;3,66;1,89;5,27;0,28;5,27;0,28;3,63;1,92;3,63;1,92
+2026-02-10;6,82;6,75;0,07;5,40;1,42;6,75;0,07;6,75;0,07;4,40;2,42;4,40;2,42;6,62;0,19;5,15;1,66;6,62;0,19;6,62;0,19;3,93;2,88;3,89;2,93
+2026-02-11;7,67;7,62;0,05;6,81;0,86;7,62;0,05;7,62;0,05;6,68;0,99;6,53;1,13;7,62;0,05;6,73;0,94;7,62;0,05;7,62;0,05;6,73;0,94;6,73;0,94
+2026-02-12;5,21;5,09;0,11;3,65;1,55;5,09;0,11;5,09;0,11;3,58;1,62;3,58;1,62;5,10;0,11;3,65;1,56;5,10;0,11;5,10;0,11;3,59;1,61;3,59;1,61
+2026-02-13;6,00;5,83;0,17;4,34;1,66;5,83;0,17;5,83;0,17;4,34;1,66;4,34;1,66;5,73;0,26;4,32;1,68;5,73;0,26;5,73;0,26;4,32;1,68;4,32;1,68
+2026-02-14;8,47;8,46;0,01;7,47;1,00;8,46;0,01;8,46;0,01;7,47;1,00;7,47;1,00;8,46;0,01;7,23;1,24;8,46;0,01;8,46;0,01;7,23;1,24;7,23;1,24
+2026-02-15;4,93;5,16;-0,22;4,52;0,42;5,16;-0,22;5,16;-0,22;4,13;0,80;4,13;0,80;5,10;-0,17;4,27;0,66;5,10;-0,17;5,10;-0,17;3,68;1,25;3,68;1,25
+2026-02-16;7,50;7,50;0,00;5,97;1,54;7,50;0,00;7,50;0,00;5,16;2,34;4,43;3,08;7,45;0,05;5,86;1,64;7,45;0,05;7,45;0,05;5,20;2,30;4,46;3,04
+2026-02-17;9,01;8,96;0,05;7,76;1,25;8,96;0,05;8,96;0,05;7,76;1,25;7,76;1,25;8,96;0,05;7,70;1,31;8,96;0,05;8,96;0,05;7,70;1,31;7,70;1,31
+2026-02-18;3,10;2,97;0,14;2,81;0,29;2,97;0,14;2,97;0,14;2,81;0,29;2,81;0,29;2,87;0,23;2,56;0,54;2,87;0,23;2,87;0,23;2,56;0,54;2,56;0,54
+2026-02-19;7,04;7,30;-0,27;6,88;0,15;7,27;-0,23;7,27;-0,23;5,79;1,25;5,11;1,93;7,30;-0,27;6,88;0,15;7,30;-0,27;7,30;-0,27;5,82;1,22;5,01;2,03
+2026-02-20;6,57;6,44;0,14;6,32;0,26;6,44;0,14;6,44;0,14;6,32;0,26;6,32;0,26;6,44;0,14;6,32;0,26;6,44;0,14;6,44;0,14;6,32;0,26;6,32;0,26
+2026-02-21;2,05;1,98;0,07;1,58;0,47;1,98;0,07;1,98;0,07;1,58;0,47;1,58;0,47;1,98;0,07;1,58;0,47;1,98;0,07;1,98;0,07;1,58;0,47;1,58;0,47
+2026-02-22;4,52;4,44;0,08;2,66;1,86;4,44;0,08;4,44;0,08;1,59;2,94;1,31;3,21;4,44;0,08;2,66;1,86;4,44;0,08;4,44;0,08;1,58;2,94;1,31;3,21
+2026-02-23;7,14;7,07;0,07;6,05;1,09;7,07;0,07;7,07;0,07;6,05;1,09;6,05;1,09;7,06;0,07;5,89;1,24;7,06;0,07;7,06;0,07;5,81;1,33;5,81;1,33
+2026-02-24;5,50;5,40;0,10;4,25;1,25;5,40;0,10;5,40;0,10;2,79;2,71;2,48;3,02;5,35;0,15;4,18;1,32;5,35;0,15;5,35;0,15;2,49;3,02;2,24;3,27
+2026-02-25;5,90;5,76;0,14;4,35;1,55;5,76;0,14;5,76;0,14;3,63;2,27;3,19;2,71;5,75;0,15;4,27;1,63;5,75;0,15;5,75;0,15;3,79;2,11;3,47;2,43
+2026-02-26;3,70;3,82;-0,12;2,98;0,72;3,82;-0,12;3,82;-0,12;2,96;0,74;2,96;0,74;3,76;-0,06;2,77;0,93;3,76;-0,06;3,76;-0,06;2,63;1,06;2,63;1,06
+2026-02-27;4,13;4,43;-0,30;4,25;-0,12;4,37;-0,24;4,37;-0,24;2,96;1,17;2,20;1,93;4,36;-0,23;3,87;0,26;4,36;-0,23;4,36;-0,23;2,51;1,62;1,76;2,37
+2026-02-28;2,43;2,33;0,10;2,14;0,29;2,33;0,10;2,33;0,10;1,26;1,17;0,65;1,78;2,14;0,29;1,83;0,60;2,14;0,29;2,14;0,29;1,14;1,29;0,39;2,04
+2026-03-01;3,41;3,41;0,00;3,10;0,31;3,04;0,37;3,04;0,37;1,77;1,64;1,35;2,06;3,17;0,23;2,86;0,55;3,14;0,27;3,14;0,27;1,42;1,99;0,95;2,46
+2026-03-02;3,65;3,71;-0,07;3,67;-0,03;3,38;0,27;3,38;0,27;2,48;1,16;1,72;1,93;3,55;0,09;3,51;0,13;2,90;0,75;2,90;0,75;2,12;1,53;1,44;2,21
+2026-03-03;3,72;3,59;0,13;3,49;0,23;2,54;1,18;1,81;1,90;2,43;1,29;1,72;2,00;3,31;0,41;3,24;0,48;2,45;1,27;1,71;2,01;2,36;1,36;1,63;2,09
+2026-03-04;3,38;2,26;1,13;1,91;1,48;1,84;1,55;1,84;1,55;1,84;1,55;1,84;1,55;2,01;1,37;1,66;1,73;1,33;2,06;1,33;2,06;1,33;2,06;1,33;2,06
+2026-03-05;3,49;3,58;-0,09;3,47;0,02;2,77;0,72;1,99;1,49;2,40;1,09;1,72;1,76;3,34;0,15;3,21;0,28;2,55;0,94;1,83;1,66;2,21;1,28;1,42;2,07
+2026-03-06;2,33;2,27;0,05;2,23;0,10;1,27;1,05;0,51;1,81;1,17;1,15;0,51;1,81;2,12;0,21;2,07;0,25;1,27;1,06;0,48;1,85;1,14;1,18;0,40;1,93
+2026-03-07;1,23;1,88;-0,64;1,33;-0,10;0,34;0,89;0,34;0,89;0,34;0,89;0,34;0,89;1,43;-0,20;1,23;0,00;0,17;1,06;0,14;1,09;0,14;1,09;0,14;1,09
+2026-03-08;3,36;3,26;0,10;3,15;0,21;2,28;1,08;1,50;1,86;2,08;1,28;1,50;1,86;2,82;0,54;2,67;0,69;1,93;1,44;1,11;2,26;1,69;1,67;0,91;2,45
+2026-03-09;2,63;3,11;-0,49;2,66;-0,03;1,58;1,05;1,44;1,19;1,48;1,15;1,34;1,29;2,70;-0,07;2,52;0,11;1,44;1,18;1,44;1,18;1,13;1,50;0,96;1,67
+2026-03-10;2,04;2,04;-0,01;2,00;0,03;0,48;1,56;0,47;1,56;0,47;1,56;0,47;1,56;1,94;0,10;1,87;0,16;1,07;0,96;0,26;1,78;0,98;1,05;0,25;1,79
+2026-03-11;5,01;4,95;0,06;3,99;1,02;4,12;0,89;4,07;0,94;2,19;2,82;1,65;3,36;4,96;0,05;3,87;1,14;4,31;0,70;4,31;0,70;1,77;3,24;1,05;3,96
+2026-03-12;4,03;4,08;-0,05;3,97;0,06;3,90;0,13;3,90;0,13;3,41;0,61;2,66;1,37;3,72;0,31;3,60;0,43;3,34;0,69;3,34;0,69;3,22;0,81;2,46;1,57
+2026-03-13;3,13;3,17;-0,04;3,00;0,13;2,53;0,60;2,53;0,60;1,92;1,21;1,30;1,82;2,91;0,22;2,74;0,39;2,44;0,69;2,44;0,69;1,62;1,51;0,84;2,29`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
+const SZ = {
+  real: { name: 'Aktuelle Anlage',                     short: 'Aktuell',        emoji: '🏠', color: '#94a3b8', group: 'basis',    desc: '4 Paneele · 800 W WR · 2,6 kWh Akku (aktuelle Installation)' },
+  sz01: { name: '8 Paneele',                           short: '8 Paneele',      emoji: '☀️', color: '#3b82f6', group: 'solar',    desc: 'Solarleistung verdoppelt · 800 W WR · 2,6 kWh Akku' },
+  sz02: { name: 'Kleiner Zusatzakku',                  short: '+Akku S',        emoji: '🔋', color: '#10b981', group: 'akku',     desc: '4 Paneele · 800 W WR · +1,5 kWh Zusatzakku (4,1 kWh gesamt)' },
+  sz03: { name: 'Großer Zusatzakku',                   short: '+Akku L',        emoji: '🔋', color: '#059669', group: 'akku',     desc: '4 Paneele · 800 W WR · +2,6 kWh Zusatzakku (5,2 kWh gesamt)' },
+  sz04: { name: '8 Paneele + Kleiner Akku',            short: '8P + Akku S',    emoji: '☀️🔋', color: '#6366f1', group: 'kombi',  desc: '8 Paneele · 800 W WR · 4,1 kWh Akku' },
+  sz05: { name: '8 Paneele + Großer Akku',             short: '8P + Akku L',    emoji: '☀️🔋', color: '#8b5cf6', group: 'kombi',  desc: '8 Paneele · 800 W WR · 5,2 kWh Akku' },
+  sz06: { name: '1.200 W Wechselrichter',              short: '1200 W WR',      emoji: '⚡', color: '#f59e0b', group: 'wr',       desc: '4 Paneele · 1.200 W WR · 2,6 kWh Akku' },
+  sz07: { name: '8 Paneele + 1.200 W WR',             short: '8P + 1200W',     emoji: '☀️⚡', color: '#f97316', group: 'wr',      desc: '8 Paneele · 1.200 W WR · 2,6 kWh Akku' },
+  sz08: { name: 'Kleiner Akku + 1.200 W WR',          short: '+Akku S 1200W',  emoji: '🔋⚡', color: '#14b8a6', group: 'wr',      desc: '4 Paneele · 1.200 W WR · 4,1 kWh Akku' },
+  sz09: { name: 'Großer Akku + 1.200 W WR',           short: '+Akku L 1200W',  emoji: '🔋⚡', color: '#0ea5e9', group: 'wr',      desc: '4 Paneele · 1.200 W WR · 5,2 kWh Akku' },
+  sz10: { name: '8 Paneele + Kleiner Akku + 1.200 W WR', short: '8P+AkkuS+1200W', emoji: '☀️🔋⚡', color: '#ec4899', group: 'voll', desc: '8 Paneele · 1.200 W WR · 4,1 kWh Akku' },
+  sz11: { name: '8 Paneele + Großer Akku + 1.200 W WR',  short: '8P+AkkuL+1200W', emoji: '☀️🔋⚡', color: '#ef4444', group: 'voll', desc: '8 Paneele · 1.200 W WR · 5,2 kWh Akku' },
+};
+const SZ_KEYS = Object.keys(SZ);
+const SZ_SCENARIO_KEYS = SZ_KEYS.filter(k => k !== 'real');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSE + AGGREGATE
+// ─────────────────────────────────────────────────────────────────────────────
+function parseCSV(raw) {
+  const lines = raw.trim().split('\n');
+  const headers = lines[0].split(';');
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = line.split(';');
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = i === 0 ? vals[i] : parseFloat((vals[i] || '0').replace(',', '.'));
+    });
+    return obj;
+  });
+}
+
+function monthKey(datum) { return datum.slice(0, 7); }
+function monthLabel(key) {
+  const [y, m] = key.split('-');
+  return new Date(+y, +m - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+}
+
+function aggregateMonthly(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const k = monthKey(r.datum);
+    if (!map[k]) {
+      map[k] = { key: k, label: monthLabel(k), days: 0, real: 0 };
+      SZ_SCENARIO_KEYS.forEach(s => { map[k][s] = 0; map[k][s + '_delta'] = 0; });
+    }
+    map[k].days++;
+    map[k].real += r.real;
+    SZ_SCENARIO_KEYS.forEach(s => {
+      map[k][s] += r[s];
+      map[k][s + '_delta'] += r[s + '_delta'];
+    });
+  });
+  // Round to 2 decimals
+  Object.values(map).forEach(m => {
+    m.real = Math.round(m.real * 100) / 100;
+    SZ_SCENARIO_KEYS.forEach(s => {
+      m[s] = Math.round(m[s] * 100) / 100;
+      m[s + '_delta'] = Math.round(m[s + '_delta'] * 100) / 100;
+    });
+  });
+  return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+const dailyData = parseCSV(CSV_RAW);
+const monthly = aggregateMonthly(dailyData);
+
+// Totals
+const totalReal = monthly.reduce((s, m) => s + m.real, 0);
+const totalSavings = {};
+SZ_SCENARIO_KEYS.forEach(s => {
+  totalSavings[s] = Math.round(monthly.reduce((sum, m) => sum + m[s + '_delta'], 0) * 100) / 100;
+});
+const bestKey = SZ_SCENARIO_KEYS.reduce((best, k) => totalSavings[k] > totalSavings[best] ? k : best);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────────────────────────────────────────
+function isDark() { return document.documentElement.classList.contains('dark'); }
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  document.getElementById('themeIcon').textContent = dark ? '☀️' : '🌙';
+  localStorage.setItem('bkw_theme', dark ? 'dark' : 'light');
+  rebuildCharts();
+}
+
+function toggleTheme() { applyTheme(!isDark()); }
+
+// Init theme from storage or system preference
+const savedTheme = localStorage.getItem('bkw_theme');
+if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+  document.documentElement.classList.add('dark');
+  document.getElementById('themeIcon').textContent = '☀️';
+}
+
+function chartColors() {
+  const dark = isDark();
+  return {
+    text: dark ? '#cbd5e1' : '#475569',
+    grid: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
+    bg:   dark ? '#111827' : '#ffffff',
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI CARDS
+// ─────────────────────────────────────────────────────────────────────────────
+function buildKpiCards() {
+  const bestSaving = totalSavings[bestKey];
+  const avgBestSaving = bestSaving / monthly.length;
+  const bestPct = ((bestSaving / totalReal) * 100).toFixed(0);
+  const maxMonthSaving = Math.max(...SZ_SCENARIO_KEYS.flatMap(s => monthly.map(m => m[s + '_delta'])));
+
+  const cards = [
+    {
+      label: 'Beste Gesamteinsparung',
+      value: bestSaving.toFixed(1) + ' kWh',
+      sub: SZ[bestKey].emoji + ' ' + SZ[bestKey].name + ' (−' + bestPct + '%)',
+      icon: '🏆',
+      cls: 'from-emerald-50 to-green-50 dark:from-emerald-900/30 dark:to-green-900/20 border-emerald-200 dark:border-emerald-800',
+      valcls: 'text-emerald-700 dark:text-emerald-300',
+    },
+    {
+      label: 'Ø Monatliche Einsparung',
+      value: avgBestSaving.toFixed(1) + ' kWh',
+      sub: SZ[bestKey].emoji + ' ' + SZ[bestKey].name,
+      icon: '📊',
+      cls: 'from-blue-50 to-sky-50 dark:from-blue-900/30 dark:to-sky-900/20 border-blue-200 dark:border-blue-800',
+      valcls: 'text-blue-700 dark:text-blue-300',
+    },
+    {
+      label: 'Höchste Monatseinsparung',
+      value: maxMonthSaving.toFixed(1) + ' kWh',
+      sub: 'Maximum über alle Szenarien & Monate',
+      icon: '⚡',
+      cls: 'from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/20 border-amber-200 dark:border-amber-800',
+      valcls: 'text-amber-700 dark:text-amber-300',
+    },
+    {
+      label: 'Verfügbare Monate',
+      value: monthly.length.toString(),
+      sub: monthly.map(m => m.label.split(' ')[0]).join(' · '),
+      icon: '📅',
+      cls: 'from-violet-50 to-purple-50 dark:from-violet-900/30 dark:to-purple-900/20 border-violet-200 dark:border-violet-800',
+      valcls: 'text-violet-700 dark:text-violet-300',
+    },
+  ];
+
+  document.getElementById('kpiCards').innerHTML = cards.map(c => `
+    <div class="card rounded-2xl border bg-gradient-to-br ${c.cls} p-5 space-y-2">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">${c.icon}</span>
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">${c.label}</span>
+      </div>
+      <div class="text-2xl font-bold tabular-nums ${c.valcls}">${c.value}</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400 leading-snug">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOTAL SAVINGS CHART (Horizontal bar)
+// ─────────────────────────────────────────────────────────────────────────────
+let chartTotal = null;
+
+function buildTotalSavingsChart() {
+  const { text, grid } = chartColors();
+  const sorted = [...activeSet]
+    .map(k => ({ k, v: totalSavings[k] }))
+    .sort((a, b) => b.v - a.v);
+
+  const ctx = document.getElementById('totalSavingsChart').getContext('2d');
+  if (chartTotal) chartTotal.destroy();
+  chartTotal = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => `${SZ[s.k].emoji} ${SZ[s.k].name}`),
+      datasets: [{
+        label: 'Einsparung (kWh)',
+        data: sorted.map(s => s.v),
+        backgroundColor: sorted.map(s => SZ[s.k].color + 'cc'),
+        borderColor: sorted.map(s => SZ[s.k].color),
+        borderWidth: 1.5,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = ((ctx.parsed.x / totalReal) * 100).toFixed(1);
+              return `  ${ctx.parsed.x.toFixed(2)} kWh gespart (${pct}% weniger Netzbezug)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: grid },
+          ticks: { color: text, callback: v => v + ' kWh' },
+          title: { display: true, text: 'Gesamteinsparung gegenüber aktueller Anlage (kWh)', color: text, font: { size: 11 } }
+        },
+        y: { ticks: { color: text, font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTHLY NETZBEZUG CHART + FILTER
+// ─────────────────────────────────────────────────────────────────────────────
+let activeSet = new Set(SZ_SCENARIO_KEYS);
+
+function buildScenarioFilter() {
+  const el = document.getElementById('scenarioFilter');
+  el.innerHTML = SZ_SCENARIO_KEYS.map(k => {
+    const active = activeSet.has(k);
+    const s = SZ[k];
+    return `
+      <button id="chip_${k}" onclick="toggleChip('${k}')"
+        class="chip text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+          active
+            ? 'text-white border-transparent shadow-sm'
+            : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-slate-400'
+        }"
+        style="${active ? 'background:' + s.color + '; border-color:' + s.color : ''}">
+        ${s.emoji} ${s.short}
+      </button>`;
+  }).join('');
+}
+
+function toggleChip(k) {
+  if (activeSet.has(k)) {
+    if (activeSet.size <= 1) return;
+    activeSet.delete(k);
+  } else {
+    activeSet.add(k);
+  }
+  // Update chip style
+  const btn = document.getElementById('chip_' + k);
+  const active = activeSet.has(k);
+  const s = SZ[k];
+  btn.style.background = active ? s.color : '';
+  btn.style.borderColor = active ? s.color : '';
+  btn.className = `chip text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+    active
+      ? 'text-white shadow-sm'
+      : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-slate-400'
+  }`;
+  rebuildFilteredCharts();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTHLY SAVINGS CHART (Line)
+// ─────────────────────────────────────────────────────────────────────────────
+let chartSavings = null;
+
+function buildMonthlySavingsChart() {
+  const { text, grid } = chartColors();
+  const labels = monthly.map(m => m.label);
+  const datasets = [...activeSet].map(k => {
+    const s = SZ[k];
+    return {
+      label: `${s.emoji} ${s.name}`,
+      data: monthly.map(m => m[k + '_delta']),
+      borderColor: s.color,
+      backgroundColor: s.color + '22',
+      borderWidth: 2,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      tension: 0.3,
+      fill: false,
+    };
+  });
+  const ctx = document.getElementById('monthlySavingsChart').getContext('2d');
+  if (chartSavings) chartSavings.destroy();
+  chartSavings = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: text, padding: 14, boxWidth: 12, boxHeight: 12, usePointStyle: true } },
+        tooltip: { callbacks: { label: c => `  ${c.dataset.label}: ${c.parsed.y.toFixed(2)} kWh` } }
+      },
+      scales: {
+        x: { ticks: { color: text }, grid: { color: grid } },
+        y: {
+          ticks: { color: text, callback: v => v + ' kWh' },
+          grid: { color: grid },
+          title: { display: true, text: 'Einsparung ggü. aktueller Anlage (kWh)', color: text, font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETAIL TABLE
+// ─────────────────────────────────────────────────────────────────────────────
+function buildDetailTable() {
+  const maxDelta = Math.max(...SZ_SCENARIO_KEYS.flatMap(s => monthly.map(m => m[s + '_delta'])));
+
+  function cellClass(delta) {
+    if (delta <= 0) return 'text-slate-400 dark:text-slate-500';
+    const r = delta / maxDelta;
+    if (r > 0.65) return 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-800 dark:text-emerald-300 font-semibold';
+    if (r > 0.30) return 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300';
+    return 'text-slate-600 dark:text-slate-400';
+  }
+
+  const totalRow = (() => {
+    const tr = { key: 'gesamt', label: 'Gesamt', real: totalReal };
+    SZ_SCENARIO_KEYS.forEach(s => {
+      tr[s] = Math.round(monthly.reduce((sum, m) => sum + m[s], 0) * 100) / 100;
+      tr[s + '_delta'] = totalSavings[s];
+    });
+    return tr;
+  })();
+
+  const rows = [...monthly, totalRow];
+
+  const filteredScenarios = SZ_SCENARIO_KEYS.filter(s => activeSet.has(s));
+  const el = document.getElementById('detailTable');
+  el.innerHTML = `
+    <thead class="sticky-header">
+      <tr class="border-b-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-900">
+        <th class="text-left py-3 px-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap min-w-[130px]">Monat</th>
+        ${filteredScenarios.map(s => `
+          <th class="text-right py-3 px-3 text-xs font-semibold whitespace-nowrap" style="color:${SZ[s].color}">
+            ${SZ[s].emoji} ${SZ[s].short}
+          </th>
+        `).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map((m, idx) => {
+        const isTotal = m.key === 'gesamt';
+        const rowBase = isTotal
+          ? 'border-t-2 border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-gray-800 font-semibold'
+          : idx % 2 === 0
+            ? 'bg-white dark:bg-gray-900 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors'
+            : 'bg-slate-50/80 dark:bg-gray-800/40 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors';
+        return `
+          <tr class="${rowBase}">
+            <td class="py-2.5 px-3 text-sm font-medium whitespace-nowrap">${m.label}</td>
+            ${filteredScenarios.map(s => {
+              const delta = m[s + '_delta'];
+              const price = parseFloat(document.getElementById('kwHPrice').value) || 0;
+              const euros = (delta * price).toFixed(2);
+              return `
+                <td class="py-2.5 px-3 text-sm text-right tabular-nums whitespace-nowrap rounded ${cellClass(delta)}">
+                  ${delta.toFixed(2)} kWh <span class="opacity-60 text-xs">(${euros} €)</span>
+                </td>`;
+            }).join('')}
+          </tr>`;
+      }).join('')}
+    </tbody>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO CARDS
+// ─────────────────────────────────────────────────────────────────────────────
+function buildScenarioCards() {
+  const sortedKeys = ['real', ...SZ_SCENARIO_KEYS.sort((a, b) => totalSavings[b] - totalSavings[a])];
+  document.getElementById('scenarioCards').innerHTML = sortedKeys.map(k => {
+    const s = SZ[k];
+    const saving = k !== 'real' ? totalSavings[k] : null;
+    const pct = saving !== null ? ((saving / totalReal) * 100).toFixed(1) : null;
+    return `
+      <div class="card flex items-start gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-gray-800/50 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+        <div class="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style="background:${s.color}"></div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-gray-800 dark:text-gray-100">${s.emoji} ${s.name}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">${s.desc}</div>
+          ${saving !== null ? `
+            <div class="mt-1.5 flex items-center gap-2">
+              <div class="h-1.5 rounded-full flex-1 bg-slate-200 dark:bg-slate-700 overflow-hidden" style="max-width:80px">
+                <div class="h-full rounded-full" style="background:${s.color};width:${Math.max(4, Math.min(100, (saving / totalSavings[bestKey]) * 100))}%"></div>
+              </div>
+              <span class="text-xs font-semibold" style="color:${s.color}">${saving.toFixed(1)} kWh gespart (${pct}%)</span>
+            </div>` : `<div class="text-xs text-slate-400 dark:text-slate-500 mt-1.5">Referenzwert</div>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REBUILD FILTERED CHARTS (called on filter change)
+// ─────────────────────────────────────────────────────────────────────────────
+function rebuildFilteredCharts() {
+  buildTotalSavingsChart();
+  buildMonthlySavingsChart();
+  buildDetailTable();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REBUILD ALL CHARTS (called on theme switch)
+// ─────────────────────────────────────────────────────────────────────────────
+function rebuildCharts() {
+  buildTotalSavingsChart();
+  buildMonthlySavingsChart();
+  buildDetailTable();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+buildKpiCards();
+buildScenarioFilter();
+buildTotalSavingsChart();
+buildMonthlySavingsChart();
+buildDetailTable();
+buildScenarioCards();
+</script>
+</body>
+</html>
