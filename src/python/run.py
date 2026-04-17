@@ -474,8 +474,8 @@ def process_date(date_str):
     add_to_csv(result_array)
 
 def main():
-    startDate = "2026-03-25"
-    endDate = "2026-03-31"
+    startDate = "2026-04-08"
+    endDate = "2026-04-16"
 
     start = datetime.strptime(startDate, "%Y-%m-%d")
     end = datetime.strptime(endDate, "%Y-%m-%d")
